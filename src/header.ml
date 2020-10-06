@@ -218,11 +218,18 @@ end = struct
   ;;
 end
 
-let origin_and_host_headers_match ~origin ~host =
+let origin_and_host_headers_match ~origin ~host ~ignore_port =
   let open Or_error.Let_syntax in
   let%bind `Scheme scheme, origin = Web_host_and_port.of_origin_header origin in
   let%bind host = Web_host_and_port.of_host_header host ~scheme in
-  Web_host_and_port.validate_equal origin host
+  if ignore_port
+  then
+    if String.equal origin.host host.host
+    then Ok ()
+    else
+      Or_error.error_s
+        [%message "Hosts don't match" (origin.host : string) (host.host : string)]
+  else Web_host_and_port.validate_equal origin host
 ;;
 
 module Expect_test_config = Core.Expect_test_config
@@ -230,7 +237,10 @@ module Expect_test_config = Core.Expect_test_config
 let%test_module _ =
   (module struct
     let check ~host ~origin =
-      print_s [%sexp (origin_and_host_headers_match ~origin ~host : unit Or_error.t)]
+      print_s
+        [%sexp
+          (origin_and_host_headers_match ~origin ~host ~ignore_port:false
+           : unit Or_error.t)]
     ;;
 
     let%expect_test "Host matching" =
@@ -291,7 +301,7 @@ let%test_module _ =
   end)
 ;;
 
-let origin_and_host_match t =
+let origin_and_host_match ?(ignore_port = false) t =
   let host = get t host_header_name in
   let origin = get t origin_header_name in
   match Option.both host origin with
@@ -301,11 +311,11 @@ let origin_and_host_match t =
         "Missing one of origin or host header"
           (origin : string option)
           (host : string option)]
-  | Some (host, origin) -> origin_and_host_headers_match ~origin ~host
+  | Some (host, origin) -> origin_and_host_headers_match ~origin ~host ~ignore_port
 ;;
 
-let origin_matches_host_or_is_one_of t ~origins =
-  match origin_and_host_match t with
+let origin_matches_host_or_is_one_of ?ignore_port t ~origins =
+  match origin_and_host_match ?ignore_port t with
   | Ok () -> Ok ()
   | Error (_ : Error.t) as host_match_error ->
     (match get t origin_header_name with
