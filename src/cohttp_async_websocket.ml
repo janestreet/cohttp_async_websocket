@@ -548,6 +548,7 @@ module Client = struct
       let shutdown = Ivar.create () in
       (match%bind
          Monitor.try_with
+           ~run:`Schedule
            (fun () -> Tcp.connect (Tcp.Where_to_connect.of_host_and_port host_and_port))
            ~rest:
              (`Call
