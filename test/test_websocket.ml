@@ -49,8 +49,10 @@ let ipv4_fds_open_in_this_process () =
   (* It's flaky to just look at all of the open FDs without any filtering. There are all
      kinds of different descriptors being used by async. Websocket connections use ipv4
      connections, so we filter down to those. *)
+  let closing fd = String.is_substring fd ~substring:"CLOSE_WAIT" in
   let file_descriptors_for_IPv4_connections =
-    List.filter file_descriptors ~f:(fun fd -> String.is_substring fd ~substring:"IPv4")
+    List.filter file_descriptors ~f:(fun fd ->
+      String.is_substring fd ~substring:"IPv4" && not (closing fd))
   in
   return file_descriptors_for_IPv4_connections
 ;;
