@@ -79,6 +79,42 @@ end = struct
   ;;
 end
 
+let%expect_test "print status code" =
+  Log.Global.set_output [];
+  let websocket_server =
+    let handle_request ~inet:_ ~subprotocol:_ _request =
+      let do_nothing _reader _writer = Deferred.unit in
+      return (Cohttp_async_websocket.Server.On_connection.create do_nothing)
+    in
+    Cohttp_async_websocket.Server.create
+      ~non_ws_request:(fun ~body:_ -> failwith "got a request that wasn't websocket!")
+      handle_request
+  in
+  let%bind http_server =
+    Cohttp_async.Server.create_expert
+      Tcp.Where_to_listen.of_port_chosen_by_os
+      ~on_handler_error:`Raise
+      websocket_server
+  in
+  let port = Cohttp_async.Server.listening_on http_server in
+  let url = Uri.of_string (sprintf "http://localhost:%d" port) in
+  let%bind response, reader, writer =
+    Cohttp_async_websocket.Client.create url >>| Or_error.ok_exn
+  in
+  let status = Cohttp_async.Response.status response in
+  print_s [%message (status : Cohttp.Code.status_code)];
+  (* A previous version of this code would produce a code of (Code 101) instead of
+     Switching_protocols. This leads to a different HTTP response header like "HTTP/1.1
+     101" rather than "HTTP/1.1 101 Switching protocols", which breaks Safari.
+
+     See https://github.com/janestreet/cohttp_async_websocket/pull/1
+  *)
+  [%expect {| (status Switching_protocols) |}];
+  Pipe.close_read reader;
+  Pipe.close writer;
+  Pipe.closed reader
+;;
+
 let%expect_test "access to headers from both client and server" =
   Log.Global.set_output [];
   let websocket_server =
