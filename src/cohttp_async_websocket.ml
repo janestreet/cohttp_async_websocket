@@ -372,7 +372,7 @@ module Server = struct
         Response.make
           ()
           ~encoding:(Header.get_transfer_encoding headers)
-          ~status:(`Code 101)
+          ~status:`Switching_protocols
           ~headers
       in
       return (`Expert (response, io_handler))
