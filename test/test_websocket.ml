@@ -2,6 +2,8 @@ open Core
 open Async
 open Cohttp_async_websocket
 
+let () = Backtrace.elide := true
+
 let%expect_test "Test tcp connection failure doesn't hang forever due to host lookup" =
   let uri = Uri.of_string "http://nonexistent:8000" in
   let%bind () =
