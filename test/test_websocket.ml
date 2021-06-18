@@ -200,3 +200,47 @@ let%expect_test "Test no file descriptor leak in client leak on invalid response
     (total_fd_leak 0) |}];
   return ()
 ;;
+
+let%expect_test _ =
+  Log.Global.set_output [];
+  let server_shutdown = Ivar.create () in
+  let websocket_server =
+    let handle_request ~inet:_ ~subprotocol:_ request =
+      Cohttp_async_websocket.Server.On_connection.create
+        ~set_response_headers:
+          (Cohttp_async.Request.headers request) (* echo the headers back at the client *)
+        ~should_overwrite_sec_accept_header:true
+        (fun reader writer ->
+           let%bind () = Pipe.closed reader in
+           print_endline "server reader closed";
+           let%bind () = Pipe.closed writer in
+           print_endline "server writer closed";
+           Ivar.fill_if_empty server_shutdown ();
+           return ())
+      |> return
+    in
+    Cohttp_async_websocket.Server.create
+      ~non_ws_request:(fun ~body:_ -> failwith "got a request that wasn't websocket!")
+      handle_request
+  in
+  let%bind http_server =
+    Cohttp_async.Server.create_expert
+      Tcp.Where_to_listen.of_port_chosen_by_os
+      ~on_handler_error:`Raise
+      websocket_server
+  in
+  let port = Cohttp_async.Server.listening_on http_server in
+  let url = Uri.of_string (sprintf "http://localhost:%d" port) in
+  let%bind _response, reader, writer =
+    Cohttp_async_websocket.Client.create url >>| Or_error.ok_exn
+  in
+  Pipe.close_read reader;
+  Pipe.close writer;
+  let%bind () = Pipe.closed reader in
+  let%bind () = Pipe.closed writer in
+  let%bind () = Ivar.read server_shutdown in
+  [%expect {|
+    server reader closed
+    server writer closed |}];
+  return ()
+;;

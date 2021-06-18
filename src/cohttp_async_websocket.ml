@@ -360,11 +360,19 @@ module Server = struct
       in
       let io_handler reader writer =
         let websocket = Websocket.create ~opcode ~role:Server reader writer in
-        let reader, writer = Websocket.pipes websocket in
+        let reader_p, writer_p = Websocket.pipes websocket in
+        don't_wait_for
+          (let%bind () =
+             Deferred.any_unit
+               [ Reader.close_finished reader; Writer.close_finished writer ]
+           in
+           Pipe.close_read reader_p;
+           Pipe.close writer_p;
+           return ());
         Deferred.all_unit
-          [ handle_connection reader writer
-          ; Pipe.closed reader
-          ; Pipe.closed writer
+          [ handle_connection reader_p writer_p
+          ; Pipe.closed reader_p
+          ; Pipe.closed writer_p
           ; Deferred.ignore_m (Websocket.close_finished websocket)
           ]
       in
