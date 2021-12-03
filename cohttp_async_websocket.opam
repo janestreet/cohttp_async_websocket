@@ -14,7 +14,7 @@ depends: [
   "async"
   "async_ssl"
   "async_websocket"
-  "core_kernel"
+  "core"
   "ppx_jane"
   "base64"          {>= "3.4.0"}
   "cohttp"          {>= "2.5.4"}
