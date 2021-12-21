@@ -45,7 +45,7 @@ let%expect_test "Test tcp connection failure doesn't hang forever due to port co
 let ipv4_fds_open_in_this_process () =
   let pid = Unix.getpid () in
   let%bind file_descriptors =
-    Process.run_lines ~prog:"/usr/sbin/lsof" ~args:[ "-p"; Pid.to_string pid ] ()
+    Process.run_lines ~prog:"/usr/bin/lsof" ~args:[ "-p"; Pid.to_string pid ] ()
     >>| ok_exn
   in
   (* It's flaky to just look at all of the open FDs without any filtering. There are all

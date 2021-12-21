@@ -17,8 +17,8 @@ depends: [
   "core"
   "ppx_jane"
   "base64"          {>= "3.4.0"}
-  "cohttp"          {>= "2.5.4"}
-  "cohttp-async"    {= "4.0.0+async"}
+  "cohttp"          {>= "2.5.6"}
+  "cohttp-async"    {>= "2.5.6"}
   "dune"            {>= "2.0.0"}
   "uri-sexp"        {>= "3.0.0"}
 ]
