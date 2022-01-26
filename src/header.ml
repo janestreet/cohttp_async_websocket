@@ -257,6 +257,8 @@ let%test_module _ =
         ("parts do not match" (part port)))) |}]
     ;;
 
+    (* If we are running a service at [hostname], and a website at [hostnameä] which has
+       malicious javascript, we ought to reject it. *)
     let%expect_test "Host matching fails on unicode URIs, no work has been put into \
                      supporting them"
       =
@@ -268,7 +270,19 @@ let%test_module _ =
         (Error
          ((((header origin) (host internal-site) (port ()))
            ((header host) (host "internal-site\195\164.attacker.co.uk") (port ())))
-          ("parts do not match" (part host)))) |}]
+          ("parts do not match" (part host)))) |}];
+      (* This test ought to fail, and doesn't
+
+         It demonstrates a bug in [Uri.of_string] which incorrectly succeeds on
+         this invalid URI.
+
+         This hinges on the attacker's ability to persuade an uncompromised web browser to
+         send an unparseable origin header.
+      *)
+      check
+        ~host:(* our service's address *) "internal-site"
+        ~origin:(* the attacker's web address *) "https://internal-siteä.attacker.co.uk";
+      [%expect {| (Ok ()) |}]
     ;;
 
     (* https://tools.ietf.org/html/rfc6454#section-3.2.1 explains that all of the
@@ -404,7 +418,41 @@ let%test_module _ =
         ~host:(Some "somehost")
         ~origin:(Some "http://host")
         ~origins:[ "http://host" ];
-      [%expect {| (Ok ()) |}]
+      [%expect {| (Ok ()) |}];
+      check
+        ~host:(Some "somehost")
+        ~origin:(Some "http://host")
+        ~origins:[ "http://otherhost" ];
+      [%expect
+        {|
+        (Error
+         (((((header origin) (host host) (port ()))
+            ((header host) (host somehost) (port ())))
+           ("parts do not match" (part host)))
+          ("origin not in inclusion list" http://host (origins (http://otherhost))))) |}]
+    ;;
+
+    let%expect_test "port ignoring in allowed origins" =
+      let check ~ignore_port =
+        check
+          ~f:(origin_matches_host_or_is_one_of ~ignore_port ~origins:[ "https://host" ])
+          ~host:(Some "somehost:80")
+          ~origin:(Some "https://host:8443")
+      in
+      check ~ignore_port:false;
+      [%expect
+        {|
+        (Error
+         (((((header origin) (host host) (port (8443)))
+            ((header host) (host somehost) (port (80))))
+           ("parts do not match" (part port)) ("parts do not match" (part host)))
+          ("origin not in inclusion list" https://host:8443 (origins (https://host))))) |}];
+      check ~ignore_port:true;
+      [%expect
+        {|
+        (Error
+         (("Hosts don't match" (origin.host host) (host.host somehost))
+          ("origin not in inclusion list" https://host:8443 (origins (https://host))))) |}]
     ;;
   end)
 ;;
