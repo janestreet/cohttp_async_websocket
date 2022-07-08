@@ -144,7 +144,7 @@ module Web_host_and_port : sig
 
   val of_origin_header : string -> ([ `Scheme of string ] * t) Or_error.t
   val of_host_header : string -> scheme:string -> t Or_error.t
-  val validate_equal : t -> t -> unit Or_error.t
+  val validate_equal : ignore_port:bool -> t -> t -> unit Or_error.t
 end = struct
   type t =
     { header : string
@@ -153,7 +153,7 @@ end = struct
     }
   [@@deriving fields, sexp_of]
 
-  let validate_equal t1 t2 =
+  let validate_equal ~ignore_port t1 t2 =
     let matches compare acc field =
       let f1 = Field.get field t1 in
       let f2 = Field.get field t2 in
@@ -168,7 +168,8 @@ end = struct
     Fields.fold
       ~init:[]
       ~host:(matches [%compare.equal: string])
-      ~port:(matches [%compare.equal: int option])
+      ~port:
+        (if ignore_port then just_for_debugging else matches [%compare.equal: int option])
       ~header:just_for_debugging
     |> Or_error.all_unit
     |> Or_error.tag_s ~tag:[%message "" ~_:(t1 : t) ~_:(t2 : t)]
@@ -222,14 +223,26 @@ let origin_and_host_headers_match ~origin ~host ~ignore_port =
   let open Or_error.Let_syntax in
   let%bind `Scheme scheme, origin = Web_host_and_port.of_origin_header origin in
   let%bind host = Web_host_and_port.of_host_header host ~scheme in
-  if ignore_port
-  then
-    if String.equal origin.host host.host
-    then Ok ()
-    else
-      Or_error.error_s
-        [%message "Hosts don't match" (origin.host : string) (host.host : string)]
-  else Web_host_and_port.validate_equal origin host
+  Web_host_and_port.validate_equal ~ignore_port origin host
+;;
+
+let origin_and_allowlist_entry_match ~origin ~allowlist_entry ~ignore_port =
+  let open Or_error.Let_syntax in
+  let%bind `Scheme origin_scheme, origin = Web_host_and_port.of_origin_header origin in
+  let%bind `Scheme allowed_scheme, allowed =
+    Web_host_and_port.of_origin_header allowlist_entry
+  in
+  let%bind () =
+    match String.equal origin_scheme allowed_scheme with
+    | true -> Ok ()
+    | false ->
+      error_s
+        [%message
+          "origin scheme and allowlist-entry scheme do not match"
+            origin_scheme
+            allowed_scheme]
+  in
+  Web_host_and_port.validate_equal ~ignore_port origin allowed
 ;;
 
 module Expect_test_config = Core.Expect_test_config
@@ -328,21 +341,30 @@ let origin_and_host_match ?(ignore_port = false) t =
   | Some (host, origin) -> origin_and_host_headers_match ~origin ~host ~ignore_port
 ;;
 
-let origin_matches_host_or_is_one_of ?ignore_port t ~origins =
-  match origin_and_host_match ?ignore_port t with
+let origin_matches_host_or_is_one_of ?(ignore_port = false) t ~origins =
+  match origin_and_host_match ~ignore_port t with
   | Ok () -> Ok ()
   | Error (_ : Error.t) as host_match_error ->
     (match get t origin_header_name with
      | None -> error_s [%message "No origin header present"]
      | Some origin ->
-       if List.exists ~f:(String.equal origin) origins
-       then Ok ()
-       else
-         Or_error.combine_errors_unit
-           [ host_match_error
-           ; error_s
-               [%message "origin not in inclusion list" origin (origins : string list)]
-           ])
+       if List.is_empty origins
+       then host_match_error
+       else (
+         match
+           Or_error.find_map_ok origins ~f:(fun allowlist_entry ->
+             origin_and_allowlist_entry_match ~origin ~ignore_port ~allowlist_entry)
+         with
+         | Ok () -> Ok ()
+         | Error (_ : Error.t) ->
+           Or_error.combine_errors_unit
+             [ host_match_error
+             ; error_s
+                 [%message
+                   "The origin is not in the allowlist"
+                     ~origin
+                     ~allowed:(origins : string list)]
+             ]))
 ;;
 
 let%test_module _ =
@@ -406,9 +428,8 @@ let%test_module _ =
       [%expect
         {|
       (Error
-       (("Missing one of origin or host header" (origin (http://somehost))
-         (host ()))
-        ("origin not in inclusion list" http://somehost (origins ())))) |}];
+       ("Missing one of origin or host header" (origin (http://somehost))
+        (host ()))) |}];
       let host = Some "somehost" in
       check ~host ~origin:(Some "http://somehost") ~origins:[];
       [%expect {| (Ok ()) |}];
@@ -429,7 +450,8 @@ let%test_module _ =
          (((((header origin) (host host) (port ()))
             ((header host) (host somehost) (port ())))
            ("parts do not match" (part host)))
-          ("origin not in inclusion list" http://host (origins (http://otherhost))))) |}]
+          ("The origin is not in the allowlist" (origin http://host)
+           (allowed (http://otherhost))))) |}]
     ;;
 
     let%expect_test "port ignoring in allowed origins" =
@@ -446,13 +468,40 @@ let%test_module _ =
          (((((header origin) (host host) (port (8443)))
             ((header host) (host somehost) (port (80))))
            ("parts do not match" (part port)) ("parts do not match" (part host)))
-          ("origin not in inclusion list" https://host:8443 (origins (https://host))))) |}];
+          ("The origin is not in the allowlist" (origin https://host:8443)
+           (allowed (https://host))))) |}];
       check ~ignore_port:true;
+      [%expect {| (Ok ()) |}]
+    ;;
+
+    let%expect_test "scheme checked in allowed origins" =
+      let check ~origins = check ~f:(origin_matches_host_or_is_one_of ~origins) in
+      check
+        ~host:(Some "somehost:80")
+        ~origin:(Some "https://host")
+        ~origins:[ "https://host" ];
+      [%expect {| (Ok ()) |}];
+      check
+        ~host:(Some "somehost:80")
+        ~origin:(Some "https://host")
+        ~origins:[ "http://host" ];
       [%expect
         {|
         (Error
-         (("Hosts don't match" (origin.host host) (host.host somehost))
-          ("origin not in inclusion list" https://host:8443 (origins (https://host))))) |}]
+         (((((header origin) (host host) (port ()))
+            ((header host) (host somehost) (port (80))))
+           ("parts do not match" (part port)) ("parts do not match" (part host)))
+          ("The origin is not in the allowlist" (origin https://host)
+           (allowed (http://host))))) |}];
+      check ~host:(Some "somehost:80") ~origin:(Some "https://host") ~origins:[ "host" ];
+      [%expect
+        {|
+        (Error
+         (((((header origin) (host host) (port ()))
+            ((header host) (host somehost) (port (80))))
+           ("parts do not match" (part port)) ("parts do not match" (part host)))
+          ("The origin is not in the allowlist" (origin https://host)
+           (allowed (host))))) |}]
     ;;
   end)
 ;;

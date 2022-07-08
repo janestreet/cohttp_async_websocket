@@ -122,8 +122,8 @@ let%expect_test "access to headers from both client and server" =
   let websocket_server =
     let handle_request ~inet:_ ~subprotocol:_ request =
       Cohttp_async_websocket.Server.On_connection.create
-        ~set_response_headers:
-          (Cohttp_async.Request.headers request) (* echo the headers back at the client *)
+        ~set_response_headers:(Cohttp_async.Request.headers request)
+        (* echo the headers back at the client *)
         ~should_overwrite_sec_accept_header:true
         (fun reader writer ->
            Pipe.close_read reader;
@@ -207,8 +207,8 @@ let%expect_test _ =
   let websocket_server =
     let handle_request ~inet:_ ~subprotocol:_ request =
       Cohttp_async_websocket.Server.On_connection.create
-        ~set_response_headers:
-          (Cohttp_async.Request.headers request) (* echo the headers back at the client *)
+        ~set_response_headers:(Cohttp_async.Request.headers request)
+        (* echo the headers back at the client *)
         ~should_overwrite_sec_accept_header:true
         (fun reader writer ->
            let%bind () = Pipe.closed reader in
