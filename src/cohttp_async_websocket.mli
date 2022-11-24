@@ -88,6 +88,7 @@ module Client : sig
   val create
     :  ?force_ssl_overriding_SNI_hostname:string
     -> ?headers:Header.t
+    -> ?opcode:[ `Text | `Binary ]
     -> Uri.t
     -> (Response.t * string Pipe.Reader.t * string Pipe.Writer.t) Deferred.Or_error.t
 
@@ -95,6 +96,7 @@ module Client : sig
       and closes the connection once the result of [f] becomes determined. *)
   val with_websocket_client
     :  ?headers:Header.t
+    -> ?opcode:[ `Text | `Binary ]
     -> Uri.t
     -> f:(Response.t -> string Pipe.Reader.t -> string Pipe.Writer.t -> 'a Deferred.t)
     -> 'a Deferred.Or_error.t
