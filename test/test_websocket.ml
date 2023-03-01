@@ -85,7 +85,7 @@ let%expect_test "print status code" =
   Log.Global.set_output [];
   let websocket_server =
     let handle_request ~inet:_ ~subprotocol:_ _request =
-      let do_nothing _reader _writer = Deferred.unit in
+      let do_nothing _websocket = Deferred.unit in
       return (Cohttp_async_websocket.Server.On_connection.create do_nothing)
     in
     Cohttp_async_websocket.Server.create
@@ -100,7 +100,7 @@ let%expect_test "print status code" =
   in
   let port = Cohttp_async.Server.listening_on http_server in
   let url = Uri.of_string (sprintf "http://localhost:%d" port) in
-  let%bind response, reader, writer =
+  let%bind response, websocket =
     Cohttp_async_websocket.Client.create url >>| Or_error.ok_exn
   in
   let status = Cohttp_async.Response.status response in
@@ -112,6 +112,7 @@ let%expect_test "print status code" =
      See https://github.com/janestreet/cohttp_async_websocket/pull/1
   *)
   [%expect {| (status Switching_protocols) |}];
+  let reader, writer = Websocket.pipes websocket in
   Pipe.close_read reader;
   Pipe.close writer;
   Pipe.closed reader
@@ -125,7 +126,8 @@ let%expect_test "access to headers from both client and server" =
         ~set_response_headers:(Cohttp_async.Request.headers request)
         (* echo the headers back at the client *)
         ~should_overwrite_sec_accept_header:true
-        (fun reader writer ->
+        (fun websocket ->
+           let reader, writer = Websocket.pipes websocket in
            Pipe.close_read reader;
            Pipe.close writer;
            Pipe.closed reader)
@@ -144,9 +146,10 @@ let%expect_test "access to headers from both client and server" =
   let port = Cohttp_async.Server.listening_on http_server in
   let headers = Cohttp.Header.of_list [ "top-secret", "this is the value" ] in
   let url = Uri.of_string (sprintf "http://localhost:%d" port) in
-  let%bind response, reader, writer =
+  let%bind response, websocket =
     Cohttp_async_websocket.Client.create ~headers url >>| Or_error.ok_exn
   in
+  let reader, writer = Websocket.pipes websocket in
   Pipe.close_read reader;
   Pipe.close writer;
   let%bind () = Pipe.closed reader in
@@ -168,7 +171,7 @@ let run_test ~protocol =
   let%bind fds_before_websocket = ipv4_fds_open_in_this_process () in
   let%bind () =
     match%bind Client.create uri with
-    | Ok (_ : Cohttp_async.Response.t * string Pipe.Reader.t * string Pipe.Writer.t) ->
+    | Ok (_ : Cohttp_async.Response.t * Websocket.t) ->
       raise_s [%message "This test expects the connection to fail, but it succeeded"]
     | Error e ->
       print_s [%sexp (e : Error.t)];
@@ -210,7 +213,8 @@ let%expect_test _ =
         ~set_response_headers:(Cohttp_async.Request.headers request)
         (* echo the headers back at the client *)
         ~should_overwrite_sec_accept_header:true
-        (fun reader writer ->
+        (fun websocket ->
+           let reader, writer = Websocket.pipes websocket in
            let%bind () = Pipe.closed reader in
            print_endline "server reader closed";
            let%bind () = Pipe.closed writer in
@@ -231,9 +235,10 @@ let%expect_test _ =
   in
   let port = Cohttp_async.Server.listening_on http_server in
   let url = Uri.of_string (sprintf "http://localhost:%d" port) in
-  let%bind _response, reader, writer =
+  let%bind _response, websocket =
     Cohttp_async_websocket.Client.create url >>| Or_error.ok_exn
   in
+  let reader, writer = Websocket.pipes websocket in
   Pipe.close_read reader;
   Pipe.close writer;
   let%bind () = Pipe.closed reader in

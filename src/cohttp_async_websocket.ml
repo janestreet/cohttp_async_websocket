@@ -10,8 +10,7 @@ module Server = struct
     type t =
       { set_response_headers : Header.t
       ; should_overwrite_sec_accept_header : bool
-      ; handle_connection :
-          string Pipe.Reader.t -> string Pipe.Writer.t -> unit Deferred.t
+      ; handle_connection : Websocket.t -> unit Deferred.t
       }
 
     let create
@@ -329,7 +328,7 @@ module Server = struct
 
   let create
         ~non_ws_request
-        ?(opcode = `Text)
+        ?opcode
         ?(should_process_request = default_auth)
         ?(websocket_subprotocol_selection = Fn.const (`Subprotocol None))
         (f : websocket_handler)
@@ -359,20 +358,9 @@ module Server = struct
           ~subprotocol
       in
       let io_handler reader writer =
-        let websocket = Websocket.create ~opcode ~role:Server reader writer in
-        let reader_p, writer_p = Websocket.pipes websocket in
-        don't_wait_for
-          (let%bind () =
-             Deferred.any_unit
-               [ Reader.close_finished reader; Writer.close_finished writer ]
-           in
-           Pipe.close_read reader_p;
-           Pipe.close writer_p;
-           return ());
+        let websocket = Websocket.create ?opcode ~role:Server reader writer in
         Deferred.all_unit
-          [ handle_connection reader_p writer_p
-          ; Pipe.closed reader_p
-          ; Pipe.closed writer_p
+          [ handle_connection websocket
           ; Deferred.ignore_m (Websocket.close_finished websocket)
           ]
       in
@@ -491,7 +479,7 @@ module Client = struct
     let ssl_to_app_r, ssl_to_app_w = Pipe.create () in
     let%bind connection =
       let verify_modes =
-        if am_running_inline_test then Some [] else None
+        if Ppx_inline_test_lib.am_running then Some [] else None
       in
       Async_ssl.Ssl.client
         ~app_to_ssl:app_to_ssl_r
@@ -549,7 +537,7 @@ module Client = struct
     | _ -> false
   ;;
 
-  let create ?force_ssl_overriding_SNI_hostname ?(opcode = `Text) ?headers uri =
+  let create ?bind_to_address ?force_ssl_overriding_SNI_hostname ?opcode ?headers uri =
     match host_and_port_of_uri uri with
     | Error _ as error -> return error
     | Ok host_and_port ->
@@ -557,7 +545,9 @@ module Client = struct
       (match%bind
          Monitor.try_with
            ~run:`Schedule
-           (fun () -> Tcp.connect (Tcp.Where_to_connect.of_host_and_port host_and_port))
+           (fun () ->
+              Tcp.connect
+                (Tcp.Where_to_connect.of_host_and_port ?bind_to_address host_and_port))
            ~rest:
              (`Call
                 (fun exn ->
@@ -590,7 +580,7 @@ module Client = struct
             return error
           | Ok response ->
             let open Deferred.Let_syntax in
-            let ws = Websocket.create ~opcode ~role:Client reader writer in
+            let ws = Websocket.create ?opcode ~role:Client reader writer in
             let reader, writer = Websocket.pipes ws in
             don't_wait_for
               (let%bind () =
@@ -608,14 +598,15 @@ module Client = struct
                      (msg : string)
                      (info : (Info.t option[@sexp.omit_nil]))];
                return ());
-            return (Ok (response, reader, writer))))
+            return (Ok (response, ws))))
   ;;
 
-  let with_websocket_client ?(opcode = `Text) ?headers uri ~f =
-    match%bind create ~opcode ?headers uri with
+  let with_websocket_client ?opcode ?headers uri ~f =
+    match%bind create ?opcode ?headers uri with
     | Error _ as err -> return err
-    | Ok (response, reader, writer) ->
-      let%bind result = f response reader writer in
+    | Ok (response, ws) ->
+      let%bind result = f response ws in
+      let _reader, writer = Websocket.pipes ws in
       Pipe.close writer;
       return (Ok result)
   ;;
