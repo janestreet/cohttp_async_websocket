@@ -549,7 +549,7 @@ module Client = struct
     | _ -> false
   ;;
 
-  let create ?force_ssl_overriding_SNI_hostname ?headers uri =
+  let create ?force_ssl_overriding_SNI_hostname ?(opcode = `Text) ?headers uri =
     match host_and_port_of_uri uri with
     | Error _ as error -> return error
     | Ok host_and_port ->
@@ -590,7 +590,7 @@ module Client = struct
             return error
           | Ok response ->
             let open Deferred.Let_syntax in
-            let ws = Websocket.create ~role:Client reader writer in
+            let ws = Websocket.create ~opcode ~role:Client reader writer in
             let reader, writer = Websocket.pipes ws in
             don't_wait_for
               (let%bind () =
@@ -611,8 +611,8 @@ module Client = struct
             return (Ok (response, reader, writer))))
   ;;
 
-  let with_websocket_client ?headers uri ~f =
-    match%bind create ?headers uri with
+  let with_websocket_client ?(opcode = `Text) ?headers uri ~f =
+    match%bind create ~opcode ?headers uri with
     | Error _ as err -> return err
     | Ok (response, reader, writer) ->
       let%bind result = f response reader writer in
