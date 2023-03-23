@@ -195,9 +195,7 @@ end = struct
       match String.lsplit2 ~on:':' value with
       | Some (host, port) ->
         let%map port =
-          remove_superfluous_port_specification
-            ~scheme
-            ~port:(Some (Int.of_string port))
+          remove_superfluous_port_specification ~scheme ~port:(Some (Int.of_string port))
         in
         { header; host; port }
       | None -> Ok { header; host = value; port = None })

@@ -521,7 +521,8 @@ module Client = struct
           | Some scheme ->
             Or_error.error_s
               [%message
-                "No port given in URI and using an unknown scheme, couldn't determine port"
+                "No port given in URI and using an unknown scheme, couldn't determine \
+                 port"
                   (scheme : string)
                   (uri : Uri_sexp.t)]
           | None ->
@@ -584,7 +585,8 @@ module Client = struct
             let reader, writer = Websocket.pipes ws in
             don't_wait_for
               (let%bind () =
-                 Deferred.any [ Ivar.read shutdown; Pipe.closed writer; Pipe.closed reader ]
+                 Deferred.any
+                   [ Ivar.read shutdown; Pipe.closed writer; Pipe.closed reader ]
                in
                Pipe.close writer;
                let%bind () = Pipe.closed writer in
