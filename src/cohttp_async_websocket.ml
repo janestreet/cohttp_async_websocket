@@ -388,7 +388,6 @@ module Client = struct
   ;;
 
   let websocket_header ?(headers = Header.init ()) hnp ~scheme =
-    let hnp_str = Host_and_port.to_string hnp in
     let header =
       Header.add_list
         headers
@@ -398,8 +397,12 @@ module Client = struct
         ; "Sec-Websocket-Version", "13"
         ]
     in
-    let header = Header.add_unless_exists header "Host" hnp_str in
-    Header.add_unless_exists header "Origin" (scheme ^ "://" ^ hnp_str)
+    match hnp with
+    | None -> header
+    | Some hnp ->
+      let hnp_str = Host_and_port.to_string hnp in
+      let header = Header.add_unless_exists header "Host" hnp_str in
+      Header.add_unless_exists header "Origin" (scheme ^ "://" ^ hnp_str)
   ;;
 
   let websocket_request ?headers host_and_port uri =
@@ -501,7 +504,13 @@ module Client = struct
     let%map ssl_to_app = Reader.of_pipe (Info.of_string "ssl_to_app") ssl_to_app_r in
     let close () =
       Async_ssl.Ssl.Connection.close connection;
-      let%bind () = Reader.close ssl_to_app in
+      let%bind () = Reader.close ssl_to_app
+      (* We still need to close [writer] here because, although
+         [Async_ssl.Ssl.Connection.close] closes its constituent pipes, calling
+         [Pipe.close] on the output of [Writer.pipe] does not close the underlying writer.
+         [Pipe.close (Reader.pipe reader)] closes the underlying reader, though.
+         Failure to close the [writer] leaks a file descriptor and memory. *)
+      and () = Writer.close writer in
       Deferred.ignore_m
         (Async_ssl.Ssl.Connection.closed connection : unit Or_error.t Deferred.t)
     in
@@ -538,26 +547,50 @@ module Client = struct
     | _ -> false
   ;;
 
+  let when_host_not_found uri =
+    Error.create_s
+      [%message "No host given for httpunix scheme in URI" (uri : Uri_sexp.t)]
+  ;;
+
+  let tcp_connector_for_uri uri =
+    match Uri.scheme uri with
+    | Some "httpunix" ->
+      let%map.Or_error unix_socket =
+        Or_error.of_option (Uri.host uri) ~error:(when_host_not_found uri)
+      in
+      fun ?bind_to_address:_ () ->
+        let%map _, reader, writer =
+          Tcp.connect (Tcp.Where_to_connect.of_file unix_socket)
+        in
+        None, reader, writer
+    | _ ->
+      let%map.Or_error host_and_port = host_and_port_of_uri uri in
+      fun ?bind_to_address () ->
+        let%map _, reader, writer =
+          Tcp.connect
+            (Tcp.Where_to_connect.of_host_and_port ?bind_to_address host_and_port)
+        in
+        Some host_and_port, reader, writer
+  ;;
+
   let create ?bind_to_address ?force_ssl_overriding_SNI_hostname ?opcode ?headers uri =
-    match host_and_port_of_uri uri with
+    match tcp_connector_for_uri uri with
     | Error _ as error -> return error
-    | Ok host_and_port ->
+    | Ok connector ->
       let shutdown = Ivar.create () in
+      let handle_remaining_exceptions exn =
+        Log.Global.sexp
+          [%message "Connection closed. Closing websocket client." (exn : exn)];
+        Ivar.fill_if_empty shutdown ()
+      in
       (match%bind
          Monitor.try_with
            ~run:`Schedule
-           (fun () ->
-              Tcp.connect
-                (Tcp.Where_to_connect.of_host_and_port ?bind_to_address host_and_port))
-           ~rest:
-             (`Call
-                (fun exn ->
-                   Log.Global.sexp
-                     [%message "Connection closed. Closing websocket client." (exn : exn)];
-                   Ivar.fill_if_empty shutdown ()))
+           ~rest:(`Call handle_remaining_exceptions)
+           (fun () -> connector ?bind_to_address ())
        with
        | Error exn -> return (Or_error.of_exn exn)
-       | Ok (_, reader, writer) ->
+       | Ok (host_and_port, reader, writer) ->
          let%bind close_tcp_connection, reader, writer =
            match force_ssl_overriding_SNI_hostname with
            | Some hostname_for_ssl -> wrap_in_ssl ~hostname_for_ssl reader writer

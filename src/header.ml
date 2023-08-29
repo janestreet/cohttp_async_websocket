@@ -151,7 +151,7 @@ end = struct
     ; host : string
     ; port : int option
     }
-  [@@deriving fields, sexp_of]
+  [@@deriving fields ~iterators:fold, sexp_of]
 
   let validate_equal ~ignore_port t1 t2 =
     let matches compare acc field =
