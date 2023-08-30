@@ -14,9 +14,9 @@ module Server = struct
       }
 
     let create
-          ?(set_response_headers = Header.init ())
-          ?(should_overwrite_sec_accept_header = true)
-          handle_connection
+      ?(set_response_headers = Header.init ())
+      ?(should_overwrite_sec_accept_header = true)
+      handle_connection
       =
       { set_response_headers; should_overwrite_sec_accept_header; handle_connection }
     ;;
@@ -180,10 +180,10 @@ module Server = struct
      Sec-WebSocket-Accept: <key>
   *)
   let websocket_handshake_headers
-        ~initial_headers:header
-        ~sec_websocket_key
-        ~should_overwrite_sec_accept_header
-        ~subprotocol
+    ~initial_headers:header
+    ~sec_websocket_key
+    ~should_overwrite_sec_accept_header
+    ~subprotocol
     =
     let maybe_overwrite_sec_accept_header header =
       if should_overwrite_sec_accept_header
@@ -247,10 +247,10 @@ module Server = struct
         print_s
           [%sexp
             (detect_request_type_and_authorize ~inet:irrelevant_inet ~auth headers
-             : [ `Not_a_websocket_request
-               | `Websocket_request of [ `Sec_websocket_key of string ]
-               ]
-                 Or_error.t)]
+              : [ `Not_a_websocket_request
+                | `Websocket_request of [ `Sec_websocket_key of string ]
+                ]
+                Or_error.t)]
       ;;
 
       let%expect_test "Only perform websocket validation if the request is for a \
@@ -327,14 +327,14 @@ module Server = struct
   ;;
 
   let create
-        ~non_ws_request
-        ?opcode
-        ?(should_process_request = default_auth)
-        ?(websocket_subprotocol_selection = Fn.const (`Subprotocol None))
-        (f : websocket_handler)
-        ~body
-        inet
-        request
+    ~non_ws_request
+    ?opcode
+    ?(should_process_request = default_auth)
+    ?(websocket_subprotocol_selection = Fn.const (`Subprotocol None))
+    (f : websocket_handler)
+    ~body
+    inet
+    request
     =
     let headers = request.Request.headers in
     match
@@ -481,9 +481,7 @@ module Client = struct
     let app_to_ssl_r, app_to_ssl_w = Pipe.create () in
     let ssl_to_app_r, ssl_to_app_w = Pipe.create () in
     let%bind connection =
-      let verify_modes =
-        if Ppx_inline_test_lib.am_running then Some [] else None
-      in
+      let verify_modes = if Ppx_inline_test_lib.am_running then Some [] else None in
       Async_ssl.Ssl.client
         ~app_to_ssl:app_to_ssl_r
         ~ssl_to_app:ssl_to_app_w

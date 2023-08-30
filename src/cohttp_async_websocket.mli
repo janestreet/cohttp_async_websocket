@@ -43,7 +43,7 @@ module Server : sig
   val create
     :  non_ws_request:http_handler
     -> ?opcode:[ `Text | `Binary ]
-    (** [should_process_request] allows a caller to guard any http handling or websocket
+         (** [should_process_request] allows a caller to guard any http handling or websocket
         handling from occurring. The default ignores the address and invokes
         [Header.origin_and_host_match] if [is_websocket_request], otherwise it returns [Ok
         ()]. All websocket requests should perform validation on the origin header field
@@ -68,7 +68,7 @@ module Server : sig
           -> Header.t
           -> is_websocket_request:bool
           -> unit Or_error.t)
-    (** [websocket_subprotocol_selection] allows the server to pick the protocol to use
+         (** [websocket_subprotocol_selection] allows the server to pick the protocol to use
         for a websocket request once [should_process_request] has accepted the connection.
         The subprotocol selected is sent back to the client as part of the
         'Sec-Websocket-Protocol' header, and included in the [subprotocol] argument of the

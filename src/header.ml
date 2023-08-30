@@ -251,7 +251,7 @@ let%test_module _ =
       print_s
         [%sexp
           (origin_and_host_headers_match ~origin ~host ~ignore_port:false
-           : unit Or_error.t)]
+            : unit Or_error.t)]
     ;;
 
     let%expect_test "Host matching" =

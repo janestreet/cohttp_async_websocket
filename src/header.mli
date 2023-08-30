@@ -12,7 +12,7 @@ val origin_matches_host_or_is_one_of
   :  ?ignore_port:bool (* If set, only check hostname not the port (default: false) *)
   -> t
   -> origins:string list
-  (* Allowlist entries must have the form scheme://host or scheme://host:port *)
+       (* Allowlist entries must have the form scheme://host or scheme://host:port *)
   -> unit Or_error.t
 
 (** Get the Sec-Websocket-Protocol entries in the header *)
