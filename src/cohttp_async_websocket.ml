@@ -318,11 +318,10 @@ module Server = struct
   ;;
 
   let forbidden request e =
-    Log.Global.error_s
-      [%message
-        "Failed to validate apparent websocket request"
-          ~_:(e : Error.t)
-          ~_:(request : Request.t)];
+    [%log.global.error
+      "Failed to validate apparent websocket request"
+        ~_:(e : Error.t)
+        ~_:(request : Request.t)];
     return (`Response (Response.make () ~status:`Forbidden, Body.empty))
   ;;
 
@@ -577,8 +576,7 @@ module Client = struct
     | Ok connector ->
       let shutdown = Ivar.create () in
       let handle_remaining_exceptions exn =
-        Log.Global.sexp
-          [%message "Connection closed. Closing websocket client." (exn : exn)];
+        [%log.global "Connection closed. Closing websocket client." (exn : exn)];
         Ivar.fill_if_empty shutdown ()
       in
       (match%bind
@@ -624,12 +622,11 @@ module Client = struct
                let%bind () = close_tcp_connection () in
                Pipe.close_read reader;
                let%bind reason, msg, info = Websocket.close_finished ws in
-               Log.Global.sexp
-                 [%message
-                   "Websocket closed"
-                     (reason : Websocket.Connection_close_reason.t)
-                     (msg : string)
-                     (info : (Info.t option[@sexp.omit_nil]))];
+               [%log.global
+                 "Websocket closed"
+                   (reason : Websocket.Connection_close_reason.t)
+                   (msg : string)
+                   (info : (Info.t option[@sexp.omit_nil]))];
                return ());
             return (Ok (response, ws))))
   ;;
