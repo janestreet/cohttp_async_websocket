@@ -18,7 +18,8 @@ let%expect_test "Test tcp connection failure doesn't hang forever due to host lo
     (e
      (monitor.ml.Error
       (core_unix.ml.Inet_addr.Get_inet_addr nonexistent "host not found")
-      ("<backtrace elided in test>"))) |}];
+      ("<backtrace elided in test>")))
+    |}];
   return ()
 ;;
 
@@ -38,7 +39,8 @@ let%expect_test "Test tcp connection failure doesn't hang forever due to port co
     (e
      (monitor.ml.Error
       (Unix.Unix_error "Connection refused" connect 127.0.0.1:PORT)
-      ("<backtrace elided in test>" "Caught by monitor Tcp.close_sock_on_error"))) |}];
+      ("<backtrace elided in test>" "Caught by monitor Tcp.close_sock_on_error")))
+    |}];
   return ()
 ;;
 
@@ -200,7 +202,8 @@ let%expect_test "Test no file descriptor leak in client leak on invalid response
     {|
     ("Bad response to websocket request"
      (response (Invalid "Malformed response first line: INVALID")))
-    (total_fd_leak 0) |}];
+    (total_fd_leak 0)
+    |}];
   return ()
 ;;
 
@@ -246,6 +249,7 @@ let%expect_test _ =
   let%bind () = Ivar.read server_shutdown in
   [%expect {|
     server reader closed
-    server writer closed |}];
+    server writer closed
+    |}];
   return ()
 ;;

@@ -261,13 +261,11 @@ module Server = struct
         [%expect {| (Ok Not_a_websocket_request) |}];
         check (Header.of_list [ "sec-websocket-key", "not-important" ]);
         [%expect
-          {|
-      (Error ("Missing one of origin or host header" (origin ()) (host ()))) |}];
+          {| (Error ("Missing one of origin or host header" (origin ()) (host ()))) |}];
         check
           (Header.of_list
              [ "origin", "http://h"; "host", "h"; "sec-websocket-key", "not-important" ]);
-        [%expect {|
-      (Ok (Websocket_request (Sec_websocket_key not-important))) |}]
+        [%expect {| (Ok (Websocket_request (Sec_websocket_key not-important))) |}]
       ;;
 
       let%expect_test "detect_request_type_and_authorize provides correct \
@@ -294,25 +292,29 @@ module Server = struct
           {|
           ((address 0.0.0.0:PORT) (is_websocket_request false)
            (headers ((host valid-host) (origin https://bogus))))
-          (Ok Not_a_websocket_request) |}];
+          (Ok Not_a_websocket_request)
+          |}];
         check fail non_websocket_headers;
         [%expect
           {|
-      ((address 0.0.0.0:PORT) (is_websocket_request false)
-       (headers ((host valid-host) (origin https://bogus))))
-      (Error fail) |}];
+          ((address 0.0.0.0:PORT) (is_websocket_request false)
+           (headers ((host valid-host) (origin https://bogus))))
+          (Error fail)
+          |}];
         check (Ok ()) websocket_headers;
         [%expect
           {|
-      ((address 0.0.0.0:PORT) (is_websocket_request true)
-       (headers ((sec-websocket-key not-important))))
-      (Ok (Websocket_request (Sec_websocket_key not-important))) |}];
+          ((address 0.0.0.0:PORT) (is_websocket_request true)
+           (headers ((sec-websocket-key not-important))))
+          (Ok (Websocket_request (Sec_websocket_key not-important)))
+          |}];
         check fail websocket_headers;
         [%expect
           {|
-      ((address 0.0.0.0:PORT) (is_websocket_request true)
-       (headers ((sec-websocket-key not-important))))
-      (Error fail) |}]
+          ((address 0.0.0.0:PORT) (is_websocket_request true)
+           (headers ((sec-websocket-key not-important))))
+          (Error fail)
+          |}]
       ;;
     end)
   ;;

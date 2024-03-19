@@ -255,17 +255,18 @@ let%test_module _ =
     ;;
 
     let%expect_test "Host matching" =
-      check ~host:"ontology" ~origin:"https://ontology";
+      check ~host:"example" ~origin:"https://example";
       [%expect {| (Ok ()) |}];
-      check ~host:"bond-webs:8443" ~origin:"https://bond-webs:8443";
+      check ~host:"example:8443" ~origin:"https://example:8443";
       [%expect {| (Ok ()) |}];
       check ~host:"site-without-port" ~origin:"https://site-without-port:1337";
       [%expect
         {|
-      (Error
-       ((((header origin) (host site-without-port) (port (1337)))
-         ((header host) (host site-without-port) (port ())))
-        ("parts do not match" (part port)))) |}]
+        (Error
+         ((((header origin) (host site-without-port) (port (1337)))
+           ((header host) (host site-without-port) (port ())))
+          ("parts do not match" (part port))))
+        |}]
     ;;
 
     (* If we are running a service at [hostname], and a website at [hostnameä] which has
@@ -281,7 +282,8 @@ let%test_module _ =
         (Error
          ((((header origin) (host internal-site) (port ()))
            ((header host) (host "internal-site\195\164.attacker.co.uk") (port ())))
-          ("parts do not match" (part host)))) |}];
+          ("parts do not match" (part host))))
+        |}];
       (* This test ought to fail, and doesn't
 
          It demonstrates a bug in [Uri.of_string] which incorrectly succeeds on
@@ -316,12 +318,13 @@ let%test_module _ =
       check ~host:"example.com" ~origin:"wss://example.com:443";
       [%expect
         {|
-          (Ok ())
-          (Ok ())
-          (Ok ())
-          (Ok ())
-          (Ok ())
-          (Ok ()) |}]
+        (Ok ())
+        (Ok ())
+        (Ok ())
+        (Ok ())
+        (Ok ())
+        (Ok ())
+        |}]
     ;;
   end)
 ;;
@@ -389,33 +392,37 @@ let%test_module _ =
       check ~host:None ~origin:(Some "http://somehost");
       [%expect
         {|
-    (Error
-     ("Missing one of origin or host header" (origin (http://somehost))
-      (host ()))) |}];
+        (Error
+         ("Missing one of origin or host header" (origin (http://somehost))
+          (host ())))
+        |}];
       check ~host:(Some "asdf") ~origin:None;
       [%expect
         {| (Error ("Missing one of origin or host header" (origin ()) (host (asdf)))) |}];
       check ~host:(Some "asdf") ~origin:(Some "https://somehost");
       [%expect
         {|
-      (Error
-       ((((header origin) (host somehost) (port ()))
-         ((header host) (host asdf) (port ())))
-        ("parts do not match" (part host)))) |}];
+        (Error
+         ((((header origin) (host somehost) (port ()))
+           ((header host) (host asdf) (port ())))
+          ("parts do not match" (part host))))
+        |}];
       check ~host:(Some "somehost") ~origin:(Some "https://somehost:994");
       [%expect
         {|
-      (Error
-       ((((header origin) (host somehost) (port (994)))
-         ((header host) (host somehost) (port ())))
-        ("parts do not match" (part port)))) |}];
+        (Error
+         ((((header origin) (host somehost) (port (994)))
+           ((header host) (host somehost) (port ())))
+          ("parts do not match" (part port))))
+        |}];
       check ~host:(Some "wrong") ~origin:(Some "https://somehost:994");
       [%expect
         {|
-      (Error
-       ((((header origin) (host somehost) (port (994)))
-         ((header host) (host wrong) (port ())))
-        ("parts do not match" (part port)) ("parts do not match" (part host)))) |}];
+        (Error
+         ((((header origin) (host somehost) (port (994)))
+           ((header host) (host wrong) (port ())))
+          ("parts do not match" (part port)) ("parts do not match" (part host))))
+        |}];
       check ~host:(Some "somehost:994") ~origin:(Some "https://somehost:994");
       [%expect {| (Ok ()) |}]
     ;;
@@ -425,9 +432,10 @@ let%test_module _ =
       check ~host:None ~origin:(Some "http://somehost") ~origins:[];
       [%expect
         {|
-      (Error
-       ("Missing one of origin or host header" (origin (http://somehost))
-        (host ()))) |}];
+        (Error
+         ("Missing one of origin or host header" (origin (http://somehost))
+          (host ())))
+        |}];
       let host = Some "somehost" in
       check ~host ~origin:(Some "http://somehost") ~origins:[];
       [%expect {| (Ok ()) |}];
@@ -449,7 +457,8 @@ let%test_module _ =
             ((header host) (host somehost) (port ())))
            ("parts do not match" (part host)))
           ("The origin is not in the allowlist" (origin http://host)
-           (allowed (http://otherhost))))) |}]
+           (allowed (http://otherhost)))))
+        |}]
     ;;
 
     let%expect_test "port ignoring in allowed origins" =
@@ -467,7 +476,8 @@ let%test_module _ =
             ((header host) (host somehost) (port (80))))
            ("parts do not match" (part port)) ("parts do not match" (part host)))
           ("The origin is not in the allowlist" (origin https://host:8443)
-           (allowed (https://host))))) |}];
+           (allowed (https://host)))))
+        |}];
       check ~ignore_port:true;
       [%expect {| (Ok ()) |}]
     ;;
@@ -490,7 +500,8 @@ let%test_module _ =
             ((header host) (host somehost) (port (80))))
            ("parts do not match" (part port)) ("parts do not match" (part host)))
           ("The origin is not in the allowlist" (origin https://host)
-           (allowed (http://host))))) |}];
+           (allowed (http://host)))))
+        |}];
       check ~host:(Some "somehost:80") ~origin:(Some "https://host") ~origins:[ "host" ];
       [%expect
         {|
@@ -499,7 +510,8 @@ let%test_module _ =
             ((header host) (host somehost) (port (80))))
            ("parts do not match" (part port)) ("parts do not match" (part host)))
           ("The origin is not in the allowlist" (origin https://host)
-           (allowed (host))))) |}]
+           (allowed (host)))))
+        |}]
     ;;
   end)
 ;;
