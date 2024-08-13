@@ -78,8 +78,8 @@ end = struct
       ~on_handler_error:`Raise
       Tcp.Where_to_listen.of_port_chosen_by_os
       (fun (_ : Socket.Address.Inet.t) (_ : Reader.t) writer ->
-      Writer.write writer "INVALID";
-      Writer.close writer)
+         Writer.write writer "INVALID";
+         Writer.close writer)
   ;;
 end
 
@@ -129,10 +129,10 @@ let%expect_test "access to headers from both client and server" =
           (* echo the headers back at the client *)
         ~should_overwrite_sec_accept_header:true
         (fun websocket ->
-        let reader, writer = Websocket.pipes websocket in
-        Pipe.close_read reader;
-        Pipe.close writer;
-        Pipe.closed reader)
+           let reader, writer = Websocket.pipes websocket in
+           Pipe.close_read reader;
+           Pipe.close writer;
+           Pipe.closed reader)
       |> return
     in
     Cohttp_async_websocket.Server.create
@@ -217,13 +217,13 @@ let%expect_test _ =
           (* echo the headers back at the client *)
         ~should_overwrite_sec_accept_header:true
         (fun websocket ->
-        let reader, writer = Websocket.pipes websocket in
-        let%bind () = Pipe.closed reader in
-        print_endline "server reader closed";
-        let%bind () = Pipe.closed writer in
-        print_endline "server writer closed";
-        Ivar.fill_if_empty server_shutdown ();
-        return ())
+           let reader, writer = Websocket.pipes websocket in
+           let%bind () = Pipe.closed reader in
+           print_endline "server reader closed";
+           let%bind () = Pipe.closed writer in
+           print_endline "server writer closed";
+           Ivar.fill_if_empty server_shutdown ();
+           return ())
       |> return
     in
     Cohttp_async_websocket.Server.create
@@ -247,7 +247,8 @@ let%expect_test _ =
   let%bind () = Pipe.closed reader in
   let%bind () = Pipe.closed writer in
   let%bind () = Ivar.read server_shutdown in
-  [%expect {|
+  [%expect
+    {|
     server reader closed
     server writer closed
     |}];

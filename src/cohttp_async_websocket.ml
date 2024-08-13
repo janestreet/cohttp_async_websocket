@@ -247,10 +247,10 @@ module Server = struct
         print_s
           [%sexp
             (detect_request_type_and_authorize ~inet:irrelevant_inet ~auth headers
-              : [ `Not_a_websocket_request
-                | `Websocket_request of [ `Sec_websocket_key of string ]
-                ]
-                Or_error.t)]
+             : [ `Not_a_websocket_request
+               | `Websocket_request of [ `Sec_websocket_key of string ]
+               ]
+                 Or_error.t)]
       ;;
 
       let%expect_test "Only perform websocket validation if the request is for a \
