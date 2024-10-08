@@ -202,8 +202,6 @@ module Server = struct
       Header.add_websocket_subprotocol header ~subprotocol)
   ;;
 
-  module Expect_test_config = Core.Expect_test_config
-
   (* {v https://tools.ietf.org/html/rfc6455#section-10.2
             10.2.  Origin Considerations
 
@@ -225,7 +223,7 @@ module Server = struct
          v}
   *)
   let detect_request_type_and_authorize ~auth ~inet headers =
-    let open Result.Let_syntax in
+    let open Deferred.Result.Let_syntax in
     let maybe_websocket_key = Header.get headers "sec-websocket-key" in
     let%map () =
       auth inet headers ~is_websocket_request:(Option.is_some maybe_websocket_key)
@@ -236,88 +234,96 @@ module Server = struct
   ;;
 
   let default_auth (_ : Socket.Address.Inet.t) header ~is_websocket_request =
-    if is_websocket_request then Header.origin_and_host_match header else Ok ()
+    Deferred.return
+      (if is_websocket_request then Header.origin_and_host_match header else Ok ())
   ;;
 
-  let%test_module _ =
-    (module struct
-      let irrelevant_inet = Socket.Address.Inet.create_bind_any ~port:0
+  module%test _ = struct
+    let irrelevant_inet = Socket.Address.Inet.create_bind_any ~port:0
 
-      let check ~auth headers =
-        print_s
-          [%sexp
-            (detect_request_type_and_authorize ~inet:irrelevant_inet ~auth headers
-             : [ `Not_a_websocket_request
-               | `Websocket_request of [ `Sec_websocket_key of string ]
-               ]
-                 Or_error.t)]
-      ;;
+    let check ~auth headers =
+      let%map result =
+        detect_request_type_and_authorize ~inet:irrelevant_inet ~auth headers
+      in
+      print_s
+        [%sexp
+          (result
+           : [ `Not_a_websocket_request
+             | `Websocket_request of [ `Sec_websocket_key of string ]
+             ]
+               Or_error.t)]
+    ;;
 
-      let%expect_test "Only perform websocket validation if the request is for a \
-                       websocket upgrade"
-        =
-        let check = check ~auth:default_auth in
-        check (Header.of_list [ "host", "valid-host"; "origin", "https://bogus" ]);
-        [%expect {| (Ok Not_a_websocket_request) |}];
-        check (Header.of_list [ "sec-websocket-key", "not-important" ]);
-        [%expect
-          {| (Error ("Missing one of origin or host header" (origin ()) (host ()))) |}];
+    let%expect_test "Only perform websocket validation if the request is for a websocket \
+                     upgrade"
+      =
+      let check = check ~auth:default_auth in
+      let%bind () =
+        check (Header.of_list [ "host", "valid-host"; "origin", "https://bogus" ])
+      in
+      [%expect {| (Ok Not_a_websocket_request) |}];
+      let%bind () = check (Header.of_list [ "sec-websocket-key", "not-important" ]) in
+      [%expect
+        {| (Error ("Missing one of origin or host header" (origin ()) (host ()))) |}];
+      let%bind () =
         check
           (Header.of_list
-             [ "origin", "http://h"; "host", "h"; "sec-websocket-key", "not-important" ]);
-        [%expect {| (Ok (Websocket_request (Sec_websocket_key not-important))) |}]
-      ;;
+             [ "origin", "http://h"; "host", "h"; "sec-websocket-key", "not-important" ])
+      in
+      [%expect {| (Ok (Websocket_request (Sec_websocket_key not-important))) |}];
+      return ()
+    ;;
 
-      let%expect_test "detect_request_type_and_authorize provides correct \
-                       [is_websocket_request] and faithfully returns the result of the \
-                       auth function"
-        =
-        let auth response address headers ~is_websocket_request =
-          print_s
-            [%sexp
-              { address : Socket.Address.Inet.t
-              ; is_websocket_request : bool
-              ; headers : Header.t
-              }];
-          response
-        in
-        let check response headers = check ~auth:(auth response) headers in
-        let non_websocket_headers =
-          Header.of_list [ "host", "valid-host"; "origin", "https://bogus" ]
-        in
-        let websocket_headers = Header.of_list [ "sec-websocket-key", "not-important" ] in
-        let fail = error_s [%message "fail"] in
-        check (Ok ()) non_websocket_headers;
-        [%expect
-          {|
-          ((address 0.0.0.0:PORT) (is_websocket_request false)
-           (headers ((host valid-host) (origin https://bogus))))
-          (Ok Not_a_websocket_request)
-          |}];
-        check fail non_websocket_headers;
-        [%expect
-          {|
-          ((address 0.0.0.0:PORT) (is_websocket_request false)
-           (headers ((host valid-host) (origin https://bogus))))
-          (Error fail)
-          |}];
-        check (Ok ()) websocket_headers;
-        [%expect
-          {|
-          ((address 0.0.0.0:PORT) (is_websocket_request true)
-           (headers ((sec-websocket-key not-important))))
-          (Ok (Websocket_request (Sec_websocket_key not-important)))
-          |}];
-        check fail websocket_headers;
-        [%expect
-          {|
-          ((address 0.0.0.0:PORT) (is_websocket_request true)
-           (headers ((sec-websocket-key not-important))))
-          (Error fail)
-          |}]
-      ;;
-    end)
-  ;;
+    let%expect_test "detect_request_type_and_authorize provides correct \
+                     [is_websocket_request] and faithfully returns the result of the \
+                     auth function"
+      =
+      let auth response address headers ~is_websocket_request =
+        print_s
+          [%sexp
+            { address : Socket.Address.Inet.t
+            ; is_websocket_request : bool
+            ; headers : Header.t
+            }];
+        Deferred.return response
+      in
+      let check response headers = check ~auth:(auth response) headers in
+      let non_websocket_headers =
+        Header.of_list [ "host", "valid-host"; "origin", "https://bogus" ]
+      in
+      let websocket_headers = Header.of_list [ "sec-websocket-key", "not-important" ] in
+      let fail = error_s [%message "fail"] in
+      let%bind () = check (Ok ()) non_websocket_headers in
+      [%expect
+        {|
+        ((address 0.0.0.0:PORT) (is_websocket_request false)
+         (headers ((host valid-host) (origin https://bogus))))
+        (Ok Not_a_websocket_request)
+        |}];
+      let%bind () = check fail non_websocket_headers in
+      [%expect
+        {|
+        ((address 0.0.0.0:PORT) (is_websocket_request false)
+         (headers ((host valid-host) (origin https://bogus))))
+        (Error fail)
+        |}];
+      let%bind () = check (Ok ()) websocket_headers in
+      [%expect
+        {|
+        ((address 0.0.0.0:PORT) (is_websocket_request true)
+         (headers ((sec-websocket-key not-important))))
+        (Ok (Websocket_request (Sec_websocket_key not-important)))
+        |}];
+      let%bind () = check fail websocket_headers in
+      [%expect
+        {|
+        ((address 0.0.0.0:PORT) (is_websocket_request true)
+         (headers ((sec-websocket-key not-important))))
+        (Error fail)
+        |}];
+      return ()
+    ;;
+  end
 
   let forbidden request e =
     [%log.global.error
@@ -338,7 +344,7 @@ module Server = struct
     request
     =
     let headers = request.Request.headers in
-    match
+    match%bind
       detect_request_type_and_authorize ~auth:should_process_request ~inet headers
     with
     | Error e -> forbidden request e
