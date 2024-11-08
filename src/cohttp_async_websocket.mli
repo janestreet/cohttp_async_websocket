@@ -67,7 +67,7 @@ module Server : sig
          (Socket.Address.Inet.t
           -> Header.t
           -> is_websocket_request:bool
-          -> unit Or_error.t)
+          -> unit Deferred.Or_error.t)
          (** [websocket_subprotocol_selection] allows the server to pick the protocol to use
         for a websocket request once [should_process_request] has accepted the connection.
         The subprotocol selected is sent back to the client as part of the
