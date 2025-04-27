@@ -2,7 +2,7 @@ open Core
 open Async
 open Cohttp_async_websocket
 
-let () = Backtrace.elide := true
+let () = Dynamic.set_root Backtrace.elide true
 
 let%expect_test "Test tcp connection failure doesn't hang forever due to host lookup" =
   let uri = Uri.of_string "http://nonexistent:8000" in
@@ -173,7 +173,7 @@ let run_test ~protocol =
   let%bind fds_before_websocket = ipv4_fds_open_in_this_process () in
   let%bind () =
     match%bind Client.create uri with
-    | Ok (_ : Cohttp_async.Response.t * Websocket.t) ->
+    | Ok (_ : Cohttp_async.Response.t * _ Websocket.t) ->
       raise_s [%message "This test expects the connection to fail, but it succeeded"]
     | Error e ->
       print_s [%sexp (e : Error.t)];
