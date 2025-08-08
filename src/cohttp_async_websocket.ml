@@ -649,11 +649,7 @@ module Client = struct
            | Some hostname_for_ssl -> wrap_in_ssl ~hostname_for_ssl reader writer
            | None ->
              (match uri_is_ssl uri with
-              | true ->
-                wrap_in_ssl
-                  ?hostname_for_ssl:force_ssl_overriding_SNI_hostname
-                  reader
-                  writer
+              | true -> wrap_in_ssl ?hostname_for_ssl:(Uri.host uri) reader writer
               | false ->
                 let close () = Writer.close writer in
                 return (close, reader, writer))
