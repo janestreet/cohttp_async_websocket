@@ -10,15 +10,15 @@ include Cohttp.Header
       Host = uri-host [ ":" port ] ; Section 2.7.1
     ]}
 
-    Following what "uri-host" is defined as:
-    which can be expanded as follows (https://tools.ietf.org/html/rfc7230#appendix-B ):
+    Following what "uri-host" is defined as: which can be expanded as follows
+    (https://tools.ietf.org/html/rfc7230#appendix-B ):
     {[
       uri-host = <host, see [RFC3986], Section 3.2.2>
     ]}
     which is explained by (https://tools.ietf.org/html/rfc3986#section-3.2.2 ) as
 
     {[
-      host        = IP-literal / IPv4address / reg-name
+      host = IP - (literal / IPv4address / reg) - name
     ]}
 
     so "uri-host" is an IP address or what is colloquially referred to as a hostname.
@@ -27,13 +27,10 @@ include Cohttp.Header
 
     Example:
 
-    For example, a GET request to the origin server for
-    <http://www.example.org/pub/WWW/> would begin with:
+    For example, a GET request to the origin server for <http://www.example.org/pub/WWW/>
+    would begin with:
 
-    GET /pub/WWW/ HTTP/1.1
-    Host: www.example.org
-
-*)
+    GET /pub/WWW/ HTTP/1.1 Host: www.example.org *)
 let host_header_name = "host"
 
 (** From https://tools.ietf.org/html/rfc6454 "The Web Origin Concept"
@@ -61,8 +58,7 @@ let host_header_name = "host"
 
               In each case, at least one of the scheme, host, and port component
               will differ from the others in the list.
-
-         v}
+    v}
     {v
            5.  Comparing Origins
 
@@ -82,7 +78,7 @@ let host_header_name = "host"
                  example, a data URI [RFC2397] is not same-origin with itself
                  because data URIs do not use a server-based naming authority and
                  therefore have globally unique identifiers as origins.
-         v}
+    v}
     {v
          6.1.  Unicode Serialization of an Origin
 
@@ -118,8 +114,7 @@ let host_header_name = "host"
                     base ten, to result.
 
             6.  Return result.
-
-         v}
+    v}
     {v
            7.1.  Syntax
 
@@ -130,8 +125,7 @@ let host_header_name = "host"
               origin-list         = serialized-origin *( SP serialized-origin )
               serialized-origin   = scheme "://" host [ ":" port ]
                                   ; <scheme>, <host>, <port> from RFC 3986
-         v}
-*)
+    v} *)
 let origin_header_name = "origin"
 
 module Web_host_and_port : sig
