@@ -1,7 +1,7 @@
 (library
  (name cohttp_async_websocket)
  (public_name cohttp_async_websocket)
- (libraries async async_ssl base64 cohttp-async cohttp core uri uri-sexp
+ (libraries async async_ssl base64 cohttp cohttp-async core uri uri-sexp
    async_websocket)
  (preprocess
   (pps ppx_jane)))
