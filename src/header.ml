@@ -262,7 +262,7 @@ module%test _ = struct
   ;;
 
   (* If we are running a service at [hostname], and a website at [hostnameä] which has
-       malicious javascript, we ought to reject it. *)
+     malicious javascript, we ought to reject it. *)
   let%expect_test "Host matching fails on unicode URIs, no work has been put into \
                    supporting them"
     =
@@ -278,11 +278,11 @@ module%test _ = struct
       |}];
     (* This test ought to fail, and doesn't
 
-         It demonstrates a bug in [Uri.of_string] which incorrectly succeeds on
-         this invalid URI.
+       It demonstrates a bug in [Uri.of_string] which incorrectly succeeds on this invalid
+       URI.
 
-         This hinges on the attacker's ability to persuade an uncompromised web browser to
-         send an unparseable origin header.
+       This hinges on the attacker's ability to persuade an uncompromised web browser to
+       send an unparseable origin header.
     *)
     check
       ~host:(* our service's address *) "internal-site"
@@ -290,16 +290,17 @@ module%test _ = struct
     [%expect {| (Ok ()) |}]
   ;;
 
-  (* https://tools.ietf.org/html/rfc6454#section-3.2.1 explains that all of the
-       following have the same origin:
+  (* https://tools.ietf.org/html/rfc6454#section-3.2.1 explains that all of the following
+     have the same origin:
 
-       {v http://example.com/
+     {v
+http://example.com/
           http://example.com:80/
           http://example.com/path/file
-       v}
+     v}
 
-       since the origin only compares the scheme, host, and port; and the default port for
-       protocol http is 80. *)
+     since the origin only compares the scheme, host, and port; and the default port for
+     protocol http is 80. *)
 
   let%expect_test "Implicit port" =
     check ~host:"example.com" ~origin:"http://example.com:80";

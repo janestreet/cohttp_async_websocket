@@ -28,7 +28,7 @@ module Server = struct
     -> Cohttp.Request.t
     -> 'msg On_connection.t Deferred.t
 
-  (* {v
+  (*={v
        [1] https://tools.ietf.org/html/rfc6455#section-1.3
        1.3.  Opening Handshake
 
@@ -488,7 +488,7 @@ module Client = struct
                https://tools.ietf.org/html/rfc6455#section-1.3 *)
             error_s [%message "Request missing required header" ~header:websocket_key]
           | Some sec_websocket_key ->
-            (* From https://tools.ietf.org/html/rfc6455#section-4.1:
+            (*=From https://tools.ietf.org/html/rfc6455#section-4.1:
 
                4.  If the response lacks a |Sec-WebSocket-Accept| header field or
                the |Sec-WebSocket-Accept| contains a value other than the
@@ -545,9 +545,9 @@ module Client = struct
     let%bind app_to_ssl, `Closed_and_flushed_downstream _ =
       Writer.of_pipe (Info.of_string "app_to_ssl") app_to_ssl_w
     in
-    (* When the pipe (app_to_ssl) is closed, there will be a short period of time when
-       the [writer] will still be open. Any message sent to the writer during that time
-       will be lost. *)
+    (* When the pipe (app_to_ssl) is closed, there will be a short period of time when the
+       [writer] will still be open. Any message sent to the writer during that time will
+       be lost. *)
     Writer.set_raise_when_consumer_leaves app_to_ssl false;
     let%map ssl_to_app = Reader.of_pipe (Info.of_string "ssl_to_app") ssl_to_app_r in
     let close () =
@@ -556,8 +556,8 @@ module Client = struct
       (* We still need to close [writer] here because, although
          [Async_ssl.Ssl.Connection.close] closes its constituent pipes, calling
          [Pipe.close] on the output of [Writer.pipe] does not close the underlying writer.
-         [Pipe.close (Reader.pipe reader)] closes the underlying reader, though.
-         Failure to close the [writer] leaks a file descriptor and memory. *)
+         [Pipe.close (Reader.pipe reader)] closes the underlying reader, though. Failure
+         to close the [writer] leaks a file descriptor and memory. *)
       and () = Writer.close writer in
       Deferred.ignore_m
         (Async_ssl.Ssl.Connection.closed connection : unit Or_error.t Deferred.t)
