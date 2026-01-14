@@ -202,7 +202,8 @@ module Server = struct
       Header.add_websocket_subprotocol header ~subprotocol)
   ;;
 
-  (* {v https://tools.ietf.org/html/rfc6455#section-10.2
+  (* {v
+https://tools.ietf.org/html/rfc6455#section-10.2
             10.2.  Origin Considerations
 
               Servers that are not intended to process input from any web page but
@@ -220,7 +221,7 @@ module Server = struct
               prevent non-browsers from establishing connections but rather to
               ensure that trusted browsers under the control of potentially
               malicious JavaScript cannot fake a WebSocket handshake.
-         v}
+     v}
   *)
   let detect_request_type_and_authorize ~auth ~inet headers =
     let open Deferred.Result.Let_syntax in
@@ -326,7 +327,7 @@ module Server = struct
   end
 
   let forbidden request e =
-    [%log.global.error
+    [%log.error
       "Failed to validate apparent websocket request"
         ~_:(e : Error.t)
         ~_:(request : Request.t)];
@@ -633,7 +634,7 @@ module Client = struct
     | Ok connector ->
       let shutdown = Ivar.create () in
       let handle_remaining_exceptions exn =
-        [%log.global "Connection closed. Closing websocket client." (exn : exn)];
+        [%log "Connection closed. Closing websocket client." (exn : exn)];
         Ivar.fill_if_empty shutdown ()
       in
       (match%bind
@@ -677,7 +678,7 @@ module Client = struct
                let%bind () = close_tcp_connection () in
                Pipe.close_read reader;
                let%bind reason, msg, info = Websocket.close_finished ws in
-               [%log.global
+               [%log
                  "Websocket closed"
                    (reason : Websocket.Connection_close_reason.t)
                    (msg : string)

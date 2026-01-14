@@ -169,17 +169,16 @@ end = struct
     |> Or_error.tag_s ~tag:[%message "" ~_:(t1 : t) ~_:(t2 : t)]
   ;;
 
-  let remove_superfluous_port_specification ~scheme ~port =
+  let remove_superfluous_port_specification ~scheme ~port:specified_port =
     let default_port =
       match scheme with
-      | "http" | "ws" -> Ok 80
-      | "https" | "wss" -> Ok 443
+      | "http" | "ws" -> Ok (Some 80)
+      | "https" | "wss" -> Ok (Some 443)
+      | "chrome-extension" -> Ok None
       | (_ : string) -> error_s [%message "Unknown scheme" ~_:scheme]
     in
     Or_error.map default_port ~f:(fun default_port ->
-      let open Option.Let_syntax in
-      let%bind specified_port = port in
-      if default_port <> specified_port then Some specified_port else None)
+      if [%equal: int option] default_port specified_port then None else specified_port)
   ;;
 
   let of_host_header value ~scheme =
@@ -415,6 +414,28 @@ module%test _ = struct
         ("parts do not match" (part port)) ("parts do not match" (part host))))
       |}];
     check ~host:(Some "somehost:994") ~origin:(Some "https://somehost:994");
+    [%expect {| (Ok ()) |}];
+    check ~host:(Some "asdf") ~origin:(Some "chrome-extension://extensionID");
+    [%expect
+      {|
+      (Error
+       ((((header origin) (host extensionID) (port ()))
+         ((header host) (host asdf) (port ())))
+        ("parts do not match" (part host))))
+      |}];
+    check ~host:(Some "asdf") ~origin:(Some "chrome-extension://extensionID:1234");
+    [%expect
+      {|
+      (Error
+       ((((header origin) (host extensionID) (port (1234)))
+         ((header host) (host asdf) (port ())))
+        ("parts do not match" (part port)) ("parts do not match" (part host))))
+      |}];
+    check ~host:(Some "extensionID") ~origin:(Some "chrome-extension://extensionID");
+    [%expect {| (Ok ()) |}];
+    check
+      ~host:(Some "extensionID:1234")
+      ~origin:(Some "chrome-extension://extensionID:1234");
     [%expect {| (Ok ()) |}]
   ;;
 
@@ -500,6 +521,91 @@ module%test _ = struct
         ("The origin is not in the allowlist" (origin https://host)
          (allowed (host)))))
       |}]
+  ;;
+
+  let%expect_test "known scheme with no default port is allowed in allowed origins" =
+    let check ~origins = check ~f:(origin_matches_host_or_is_one_of ~origins) in
+    check
+      ~host:(Some "somehost:80")
+      ~origin:(Some "chrome-extension://adsfasfasdafssdfas")
+      ~origins:[];
+    [%expect
+      {|
+      (Error
+       ((((header origin) (host adsfasfasdafssdfas) (port ()))
+         ((header host) (host somehost) (port (80))))
+        ("parts do not match" (part port)) ("parts do not match" (part host))))
+      |}];
+    check
+      ~host:(Some "somehost:80")
+      ~origin:(Some "chrome-extension://adsfasfasdafssdfas")
+      ~origins:[ "chrome-extension://adsfasfasdafssdfas:90" ];
+    [%expect
+      {|
+      (Error
+       (((((header origin) (host adsfasfasdafssdfas) (port ()))
+          ((header host) (host somehost) (port (80))))
+         ("parts do not match" (part port)) ("parts do not match" (part host)))
+        ("The origin is not in the allowlist"
+         (origin chrome-extension://adsfasfasdafssdfas)
+         (allowed (chrome-extension://adsfasfasdafssdfas:90)))))
+      |}];
+    check
+      ~host:(Some "somehost:80")
+      ~origin:(Some "chrome-extension://adsfasfasdafssdfas:90")
+      ~origins:[ "chrome-extension://adsfasfasdafssdfas" ];
+    [%expect
+      {|
+      (Error
+       (((((header origin) (host adsfasfasdafssdfas) (port (90)))
+          ((header host) (host somehost) (port (80))))
+         ("parts do not match" (part port)) ("parts do not match" (part host)))
+        ("The origin is not in the allowlist"
+         (origin chrome-extension://adsfasfasdafssdfas:90)
+         (allowed (chrome-extension://adsfasfasdafssdfas)))))
+      |}];
+    check
+      ~host:(Some "somehost:80")
+      ~origin:(Some "chrome-extension://adsfasfasdafssdfas")
+      ~origins:[ "chrome-extension://adsfasfasdafssdfas" ];
+    [%expect {| (Ok ()) |}]
+  ;;
+
+  let%expect_test "ignore_port is respected in known schemes with no default port" =
+    let check ~origins =
+      check ~f:(origin_matches_host_or_is_one_of ~ignore_port:true ~origins)
+    in
+    check
+      ~host:(Some "somehost:80")
+      ~origin:(Some "chrome-extension://adsfasfasdafssdfas")
+      ~origins:[];
+    [%expect
+      {|
+      (Error
+       ((((header origin) (host adsfasfasdafssdfas) (port ()))
+         ((header host) (host somehost) (port (80))))
+        ("parts do not match" (part host))))
+      |}];
+    check
+      ~host:(Some "somehost:80")
+      ~origin:(Some "chrome-extension://adsfasfasdafssdfas")
+      ~origins:[ "chrome-extension://adsfasfasdafssdfas:90" ];
+    [%expect {| (Ok ()) |}];
+    check
+      ~host:(Some "somehost:80")
+      ~origin:(Some "chrome-extension://adsfasfasdafssdfas")
+      ~origins:[ "chrome-extension://adsfasfasdafssdfas:90" ];
+    [%expect {| (Ok ()) |}];
+    check
+      ~host:(Some "somehost:80")
+      ~origin:(Some "chrome-extension://adsfasfasdafssdfas:90")
+      ~origins:[ "chrome-extension://adsfasfasdafssdfas" ];
+    [%expect {| (Ok ()) |}];
+    check
+      ~host:(Some "somehost:80")
+      ~origin:(Some "chrome-extension://adsfasfasdafssdfas")
+      ~origins:[ "chrome-extension://adsfasfasdafssdfas" ];
+    [%expect {| (Ok ()) |}]
   ;;
 end
 
