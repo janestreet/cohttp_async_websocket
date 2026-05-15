@@ -5,6 +5,12 @@ module Header = Header
 
 let websocket_accept_header_name = "Sec-Websocket-Accept"
 
+type should_process_request =
+  Socket.Address.Inet.t
+  -> Header.t
+  -> is_websocket_request:bool
+  -> unit Deferred.Or_error.t
+
 module Server = struct
   module On_connection = struct
     type 'msg t =
@@ -223,15 +229,16 @@ https://tools.ietf.org/html/rfc6455#section-10.2
               malicious JavaScript cannot fake a WebSocket handshake.
      v}
   *)
-  let detect_request_type_and_authorize ~auth ~inet headers =
-    let open Deferred.Result.Let_syntax in
+  let detect_request_type_and_authorize ~(auth : should_process_request) ~inet headers =
     let maybe_websocket_key = Header.get headers "sec-websocket-key" in
-    let%map () =
-      auth inet headers ~is_websocket_request:(Option.is_some maybe_websocket_key)
-    in
-    match maybe_websocket_key with
-    | None -> `Not_a_websocket_request
-    | Some sec_websocket_key -> `Websocket_request (`Sec_websocket_key sec_websocket_key)
+    [%map.Deferred.Result
+      let () =
+        auth inet headers ~is_websocket_request:(Option.is_some maybe_websocket_key)
+      in
+      match maybe_websocket_key with
+      | None -> `Not_a_websocket_request
+      | Some sec_websocket_key ->
+        `Websocket_request (`Sec_websocket_key sec_websocket_key)]
   ;;
 
   let default_auth (_ : Socket.Address.Inet.t) header ~is_websocket_request =
@@ -242,7 +249,7 @@ https://tools.ietf.org/html/rfc6455#section-10.2
   module%test _ = struct
     let irrelevant_inet = Socket.Address.Inet.create_bind_any ~port:0
 
-    let check ~auth headers =
+    let check ~(auth : should_process_request) headers =
       let%map result =
         detect_request_type_and_authorize ~inet:irrelevant_inet ~auth headers
       in
@@ -275,55 +282,59 @@ https://tools.ietf.org/html/rfc6455#section-10.2
       return ()
     ;;
 
-    let%expect_test "detect_request_type_and_authorize provides correct \
-                     [is_websocket_request] and faithfully returns the result of the \
-                     auth function"
-      =
-      let auth response address headers ~is_websocket_request =
-        print_s
-          [%sexp
-            { address : Socket.Address.Inet.t
-            ; is_websocket_request : bool
-            ; headers : Header.t
-            }];
-        Deferred.return response
-      in
-      let check response headers = check ~auth:(auth response) headers in
-      let non_websocket_headers =
-        Header.of_list [ "host", "valid-host"; "origin", "https://bogus" ]
-      in
-      let websocket_headers = Header.of_list [ "sec-websocket-key", "not-important" ] in
-      let fail = error_s [%message "fail"] in
-      let%bind () = check (Ok ()) non_websocket_headers in
-      [%expect
-        {|
-        ((address 0.0.0.0:PORT) (is_websocket_request false)
-         (headers ((host valid-host) (origin https://bogus))))
-        (Ok Not_a_websocket_request)
-        |}];
-      let%bind () = check fail non_websocket_headers in
-      [%expect
-        {|
-        ((address 0.0.0.0:PORT) (is_websocket_request false)
-         (headers ((host valid-host) (origin https://bogus))))
-        (Error fail)
-        |}];
-      let%bind () = check (Ok ()) websocket_headers in
-      [%expect
-        {|
-        ((address 0.0.0.0:PORT) (is_websocket_request true)
-         (headers ((sec-websocket-key not-important))))
-        (Ok (Websocket_request (Sec_websocket_key not-important)))
-        |}];
-      let%bind () = check fail websocket_headers in
-      [%expect
-        {|
-        ((address 0.0.0.0:PORT) (is_websocket_request true)
-         (headers ((sec-websocket-key not-important))))
-        (Error fail)
-        |}];
-      return ()
-    ;;
+    [%%expect_test
+      let "detect_request_type_and_authorize provides correct [is_websocket_request] and \
+           faithfully returns the result of the auth function"
+        =
+        let auth response address headers ~is_websocket_request =
+          print_s
+            [%sexp
+              { address : Socket.Address.Inet.t
+              ; is_websocket_request : bool
+              ; headers : Header.t
+              }];
+          Deferred.return response
+        in
+        let check response headers = check ~auth:(auth response) headers in
+        let non_websocket_headers =
+          Header.of_list [ "host", "valid-host"; "origin", "https://bogus" ]
+        in
+        let websocket_headers = Header.of_list [ "sec-websocket-key", "not-important" ] in
+        let fail = error_s [%message "fail"] in
+        [%bind
+          let () = check (Ok ()) non_websocket_headers in
+          [%expect
+            {|
+          ((address 0.0.0.0:PORT) (is_websocket_request false)
+           (headers ((host valid-host) (origin https://bogus))))
+          (Ok Not_a_websocket_request)
+          |}];
+          [%bind
+            let () = check fail non_websocket_headers in
+            [%expect
+              {|
+          ((address 0.0.0.0:PORT) (is_websocket_request false)
+           (headers ((host valid-host) (origin https://bogus))))
+          (Error fail)
+          |}];
+            [%bind
+              let () = check (Ok ()) websocket_headers in
+              [%expect
+                {|
+          ((address 0.0.0.0:PORT) (is_websocket_request true)
+           (headers ((sec-websocket-key not-important))))
+          (Ok (Websocket_request (Sec_websocket_key not-important)))
+          |}];
+              [%bind
+                let () = check fail websocket_headers in
+                [%expect
+                  {|
+          ((address 0.0.0.0:PORT) (is_websocket_request true)
+           (headers ((sec-websocket-key not-important))))
+          (Error fail)
+          |}];
+                return ()]]]]
+      ;;]
   end
 
   let forbidden request e =
@@ -345,11 +356,26 @@ https://tools.ietf.org/html/rfc6455#section-10.2
     request
     =
     let headers = request.Request.headers in
-    match%bind
-      detect_request_type_and_authorize ~auth:should_process_request ~inet headers
-    with
-    | Error e -> forbidden request e
-    | Ok (`Websocket_request (`Sec_websocket_key sec_websocket_key)) ->
+    let accept_handshake_response
+      sec_websocket_key
+      ~subprotocol
+      ~initial_headers
+      ~should_overwrite_sec_accept_header
+      =
+      let handshake_headers =
+        websocket_handshake_headers
+          ~initial_headers
+          ~sec_websocket_key
+          ~should_overwrite_sec_accept_header
+          ~subprotocol
+      in
+      Response.make
+        ()
+        ~encoding:(Header.get_transfer_encoding handshake_headers)
+        ~status:`Switching_protocols
+        ~headers:handshake_headers
+    in
+    let handle_websocket_request sec_websocket_key =
       let (`Subprotocol subprotocol) = websocket_subprotocol_selection request in
       let%bind { set_response_headers
                ; should_overwrite_sec_accept_header
@@ -357,13 +383,6 @@ https://tools.ietf.org/html/rfc6455#section-10.2
                }
         =
         f ~inet ~subprotocol request
-      in
-      let headers =
-        websocket_handshake_headers
-          ~initial_headers:set_response_headers
-          ~sec_websocket_key
-          ~should_overwrite_sec_accept_header
-          ~subprotocol
       in
       let io_handler reader writer =
         let websocket =
@@ -375,14 +394,22 @@ https://tools.ietf.org/html/rfc6455#section-10.2
           ]
       in
       let response =
-        Response.make
-          ()
-          ~encoding:(Header.get_transfer_encoding headers)
-          ~status:`Switching_protocols
-          ~headers
+        accept_handshake_response
+          sec_websocket_key
+          ~subprotocol
+          ~initial_headers:set_response_headers
+          ~should_overwrite_sec_accept_header
       in
       return (`Expert (response, io_handler))
-    | Ok `Not_a_websocket_request -> non_ws_request ~body inet request
+    in
+    [%bind
+      match
+        detect_request_type_and_authorize ~auth:should_process_request ~inet headers
+      with
+      | Error e -> forbidden request e
+      | Ok `Not_a_websocket_request -> non_ws_request ~body inet request
+      | Ok (`Websocket_request (`Sec_websocket_key sec_websocket_key)) ->
+        handle_websocket_request sec_websocket_key]
   ;;
 
   let create'

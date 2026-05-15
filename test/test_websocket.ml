@@ -157,7 +157,7 @@ let%expect_test "access to headers from both client and server" =
   let%bind () = Pipe.closed reader in
   response
   |> Cohttp_async.Response.headers
-  |> Fn.flip Cohttp.Header.get "top-secret"
+  |> Cohttp.Header.get _ "top-secret"
   |> Option.value_exn
   |> print_endline;
   [%expect {| this is the value |}];

@@ -3,6 +3,12 @@ open! Async
 open! Import
 module Header = Header
 
+type should_process_request =
+  Socket.Address.Inet.t
+  -> Header.t
+  -> is_websocket_request:bool
+  -> unit Deferred.Or_error.t
+
 type http_handler :=
   body:Body.t -> Socket.Address.Inet.t -> Request.t -> Server.response Deferred.t
 
@@ -42,36 +48,36 @@ module Server : sig
 
   val create
     :  non_ws_request:http_handler
-    -> ?opcode:[ `Text | `Binary ]
-         (** [should_process_request] allows a caller to guard any http handling or
-             websocket handling from occurring. The default ignores the address and
-             invokes [Header.origin_and_host_match] if [is_websocket_request], otherwise
-             it returns [Ok ()]. All websocket requests should perform validation on the
-             origin header field for security purposes.
+    -> ?opcode:
+         ([ `Text | `Binary ]
+         [@ocaml.doc
+           {| [should_process_request] allows a caller to guard any http handling or
+               websocket handling from occurring. The default ignores the address and
+               invokes [Header.origin_and_host_match] if [is_websocket_request], otherwise
+               it returns [Ok ()]. All websocket requests should perform validation on the
+               origin header field for security purposes.
 
-             As an example, in the case of a web server which only wants to allow
-             websocket requests that originate from itself, or "https://some-client":
-             {[
-               let origins = [ "https://some-client" ] in
-               let should_process_request
-                     (_ : Socket.Address.Inet.t)
-                     header
-                     ~is_websocket_request
-                 =
-                 if is_websocket_request then
-                   Cohttp.Header.origin_matches_host_or_is_one_of header ~origins
-                 else Ok ()
-             ]} *)
+               As an example, in the case of a web server which only wants to allow
+               websocket requests that originate from itself, or "https://some-client":
+               {[
+                 let origins = [ "https://some-client" ] in
+                 let should_process_request
+                       (_ : Socket.Address.Inet.t)
+                       header
+                       ~is_websocket_request
+                   =
+                   if is_websocket_request then
+                     Cohttp.Header.origin_matches_host_or_is_one_of header ~origins
+                   else Ok ()
+               ]} |}])
     -> ?should_process_request:
-         (Socket.Address.Inet.t
-          -> Header.t
-          -> is_websocket_request:bool
-          -> unit Deferred.Or_error.t)
-         (** [websocket_subprotocol_selection] allows the server to pick the protocol to
-             use for a websocket request once [should_process_request] has accepted the
-             connection. The subprotocol selected is sent back to the client as part of
-             the 'Sec-Websocket-Protocol' header, and included in the [subprotocol]
-             argument of the [websocket_handler]. *)
+         (should_process_request
+         [@ocaml.doc
+           {| [websocket_subprotocol_selection] allows the server to pick the protocol to
+               use for a websocket request once [should_process_request] has accepted the
+               connection. The subprotocol selected is sent back to the client as part of
+               the 'Sec-Websocket-Protocol' header, and included in the [subprotocol]
+               argument of the [websocket_handler]. |}])
     -> ?websocket_subprotocol_selection:(Request.t -> [ `Subprotocol of string option ])
     -> string websocket_handler
     -> raw_http_handler
@@ -83,11 +89,7 @@ module Server : sig
         types in addition to content bytes. *)
   val create'
     :  non_ws_request:raw_http_handler
-    -> ?should_process_request:
-         (Socket.Address.Inet.t
-          -> Header.t
-          -> is_websocket_request:bool
-          -> unit Deferred.Or_error.t)
+    -> ?should_process_request:should_process_request
     -> ?websocket_subprotocol_selection:(Request.t -> [ `Subprotocol of string option ])
     -> Websocket.Frame_content.t websocket_handler
     -> raw_http_handler
