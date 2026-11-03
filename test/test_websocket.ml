@@ -164,6 +164,68 @@ let%expect_test "access to headers from both client and server" =
   return ()
 ;;
 
+let%expect_test "Client.create' preserves opcodes and closes when its writer pipe closes" =
+  Log.Global.set_output [];
+  let server_finished = Ivar.create () in
+  let websocket_server =
+    let handle_request ~inet:_ ~subprotocol:_ _request =
+      let handle_connection websocket =
+        let reader, writer = Websocket.pipes websocket in
+        let rec echo_frames () =
+          match%bind Pipe.read reader with
+          | `Ok frame ->
+            let%bind () = Pipe.write writer frame in
+            echo_frames ()
+          | `Eof -> return ()
+        in
+        let%bind () = echo_frames () in
+        print_endline "server reader closed";
+        let%bind () = Pipe.closed writer in
+        print_endline "server writer closed";
+        Ivar.fill_if_empty server_finished ();
+        return ()
+      in
+      return (Cohttp_async_websocket.Server.On_connection.create handle_connection)
+    in
+    Cohttp_async_websocket.Server.create'
+      ~non_ws_request:(fun ~body:_ _inet _request ->
+        failwith "got a request that wasn't websocket!")
+      handle_request
+  in
+  let%bind http_server =
+    Cohttp_async.Server.create_expert
+      Tcp.Where_to_listen.of_port_chosen_by_os
+      ~on_handler_error:`Raise
+      websocket_server
+  in
+  let port = Cohttp_async.Server.listening_on http_server in
+  let url = Uri.of_string (sprintf "http://localhost:%d" port) in
+  let%bind _response, websocket =
+    Cohttp_async_websocket.Client.create' url >>| Or_error.ok_exn
+  in
+  let reader, writer = Websocket.pipes websocket in
+  let send_and_receive frame =
+    let%bind () = Pipe.write writer frame in
+    match%map Pipe.read reader with
+    | `Ok frame -> frame
+    | `Eof -> raise_s [%message "Client websocket closed before receiving echoed frame"]
+  in
+  let%bind text = send_and_receive { opcode = Text; content = "text" } in
+  print_s [%sexp (text : Websocket.Frame_content.t)];
+  [%expect {| ((opcode Text) (content text)) |}];
+  let%bind binary = send_and_receive { opcode = Binary; content = "binary" } in
+  print_s [%sexp (binary : Websocket.Frame_content.t)];
+  [%expect {| ((opcode Binary) (content binary)) |}];
+  Pipe.close writer;
+  let%bind () = Ivar.read server_finished in
+  [%expect
+    {|
+    server reader closed
+    server writer closed
+    |}];
+  return ()
+;;
+
 let run_test ~protocol =
   Log.Global.set_output [];
   let%bind server = Test_server.create () in

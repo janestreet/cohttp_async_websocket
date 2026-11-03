@@ -48,6 +48,12 @@ module Server : sig
 
   val create
     :  non_ws_request:http_handler
+    -> ?apply_pushback:
+         (bool
+         [@ocaml.doc
+           {| Default [false]. See [Websocket.create] for the meaning and caveats: it
+               only affects the receive path, and control frames are not processed while
+               reads are paused. |}])
     -> ?opcode:
          ([ `Text | `Binary ]
          [@ocaml.doc
@@ -89,6 +95,10 @@ module Server : sig
         types in addition to content bytes. *)
   val create'
     :  non_ws_request:raw_http_handler
+    -> ?apply_pushback:bool
+         (** Default [false]. See [Websocket.create] for the meaning and caveats: it only
+             affects the receive path, and control frames are not processed while reads
+             are paused. *)
     -> ?should_process_request:should_process_request
     -> ?websocket_subprotocol_selection:(Request.t -> [ `Subprotocol of string option ])
     -> Websocket.Frame_content.t websocket_handler
@@ -102,12 +112,25 @@ module Client : sig
       [force_ssl_overriding_SNI_hostname] will unconditionally cause [create] to use
       TLS/SSL, and will send its value as the SNI hostname. *)
   val create
-    :  ?bind_to_address:Unix.Inet_addr.t
+    :  ?apply_pushback:bool
+         (** Default [false]. See [Websocket.create] for the meaning and caveats: it only
+             affects the receive path, and control frames are not processed while reads
+             are paused. *)
+    -> ?bind_to_address:Unix.Inet_addr.t
     -> ?force_ssl_overriding_SNI_hostname:string
     -> ?opcode:[ `Text | `Binary ]
     -> ?headers:Header.t
     -> Uri.t
     -> (Response.t * string Websocket.t) Deferred.Or_error.t
+
+  (** Similar to [create] but preserves frame opcodes. See [create] for documentation *)
+  val create'
+    :  ?apply_pushback:bool
+    -> ?bind_to_address:Unix.Inet_addr.t
+    -> ?force_ssl_overriding_SNI_hostname:string
+    -> ?headers:Header.t
+    -> Uri.t
+    -> (Response.t * Websocket.Frame_content.t Websocket.t) Deferred.Or_error.t
 
   (** [with_websocket_client uri ~f] applies [f] to the result of [create uri], and closes
       the connection once the result of [f] becomes determined. *)

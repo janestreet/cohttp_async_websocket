@@ -414,6 +414,7 @@ https://tools.ietf.org/html/rfc6455#section-10.2
 
   let create'
     ~non_ws_request
+    ?apply_pushback
     ?should_process_request
     ?websocket_subprotocol_selection
     f
@@ -422,7 +423,7 @@ https://tools.ietf.org/html/rfc6455#section-10.2
     request
     =
     create_gen
-      ~websocket_create:Websocket.create'
+      ~websocket_create:(Websocket.create' ?apply_pushback)
       ~non_ws_request
       ?should_process_request
       ?websocket_subprotocol_selection
@@ -434,6 +435,7 @@ https://tools.ietf.org/html/rfc6455#section-10.2
 
   let create
     ~non_ws_request
+    ?apply_pushback
     ?opcode
     ?should_process_request
     ?websocket_subprotocol_selection
@@ -443,7 +445,7 @@ https://tools.ietf.org/html/rfc6455#section-10.2
     request
     =
     create_gen
-      ~websocket_create:(Websocket.create ?opcode)
+      ~websocket_create:(Websocket.create ?opcode ?apply_pushback)
       ~non_ws_request:(fun ~body address request ->
         let%map r = non_ws_request ~body address request in
         `Response r)
@@ -714,22 +716,35 @@ module Client = struct
             return (Ok (response, ws))))
   ;;
 
-  let create ?bind_to_address ?force_ssl_overriding_SNI_hostname ?opcode ?headers uri =
+  let create
+    ?apply_pushback
+    ?bind_to_address
+    ?force_ssl_overriding_SNI_hostname
+    ?opcode
+    ?headers
+    uri
+    =
     create_gen
       ?bind_to_address
       ?force_ssl_overriding_SNI_hostname
       ?headers
       uri
-      ~websocket_create:(Websocket.create ?opcode)
+      ~websocket_create:(Websocket.create ?opcode ?apply_pushback)
   ;;
 
-  let create' ?bind_to_address ?force_ssl_overriding_SNI_hostname ?headers uri =
+  let create'
+    ?apply_pushback
+    ?bind_to_address
+    ?force_ssl_overriding_SNI_hostname
+    ?headers
+    uri
+    =
     create_gen
       ?bind_to_address
       ?force_ssl_overriding_SNI_hostname
       ?headers
       uri
-      ~websocket_create:Websocket.create'
+      ~websocket_create:(Websocket.create' ?apply_pushback)
   ;;
 
   let with_websocket_client_internal ?headers uri ~f ~create =
